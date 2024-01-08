@@ -75,36 +75,40 @@ class TicketGrabbingApp:
         #         self.sleeptimeLast_label.grid(row=1, column=3, pady=5, sticky=tk.W)
 
         self.tryTime_label = ttk.Label(self.options_frame,
-                                       text="设置抢票尝试次数, 不写默认10次, 写-1表示一直持续下去(可以用来捡漏??):")
-        self.tryTime_label.grid(row=1, column=0, pady=5, sticky=tk.W)
-        self.tryTime_entry = ttk.Entry(self.options_frame, width=12)
-        self.tryTime_entry.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
-        self.tryTimeLast_label = ttk.Label(self.options_frame, text="次")
-        self.tryTimeLast_label.grid(row=1, column=2, pady=5, sticky=tk.W)
+                                       text="抢票尝试次数, 默认10次, 写-1为持续抢票模式:")
+        self.tryTime_label.grid(row=1, column=0, padx=10, pady=5, sticky=tk.W)
+        self.tryTime_entry = ttk.Entry(self.options_frame)
+        self.tryTime_entry.grid(row=1, column=1, padx=10, pady=5, sticky=tk.W)
 
-        # self.thread_count_label = ttk.Label(self.options_frame, text="使用抢票的线程个数:")
-        # self.thread_count_label.grid(row=1, column=0, padx=10, pady=5, sticky=tk.W)
+        # self.thread_count_label = ttk.Label(self.options_frame, text="使用抢票的线程个数(大于1时请谨慎！！):")
+        # self.thread_count_label.grid(row=2, column=0, padx=10, pady=5, sticky=tk.W)
         # self.thread_count_entry = ttk.Entry(self.options_frame)
-        # self.thread_count_entry.grid(row=1, column=1, padx=10, pady=5, sticky=tk.W)
+        # self.thread_count_entry.grid(row=2, column=1, padx=10, pady=5, sticky=tk.W)
+
+        self.time_before_label = ttk.Label(self.options_frame, text="抢票提前开始的时间(单位：秒):")
+        self.time_before_label.grid(row=3, column=0, padx=10, pady=5, sticky=tk.W)
+        self.time_before_entry = ttk.Entry(self.options_frame)
+        self.time_before_entry.grid(row=3, column=1, padx=10, pady=5, sticky=tk.W)
 
         self.status_label = scrolledtext.ScrolledText(master, wrap=tk.WORD, width=100, height=10)
         self.status_label.grid(row=2, column=0, columnspan=2, pady=10)
 
-        # Submit Button
+        # Start Button
         self.submit_button = ttk.Button(master, text="开始抢票", command=self.start_grabbing)
         self.submit_button.grid(row=3, column=0, columnspan=2, pady=10)
 
         # Stop Button
-        self.submit_button = ttk.Button(master, text="停止抢票", command=self.stop_grabbing)
-        self.submit_button.grid(row=3, column=1, columnspan=2, pady=10)
+        self.stop_button = ttk.Button(master, text="停止抢票", command=self.stop_grabbing)
+        self.stop_button.grid(row=4, column=0, columnspan=2, pady=10)
+
         # Current Time Display
         self.current_time_label = ttk.Label(master, text="")
-        self.current_time_label.grid(row=4, column=0, columnspan=2, pady=10)
+        self.current_time_label.grid(row=5, column=0, columnspan=2, pady=10)
         self.isStartCrabbing = False
 
         # Time Difference Label
         self.time_difference_label = ttk.Label(master, text="")
-        self.time_difference_label.grid(row=5, column=0, columnspan=2, pady=10)
+        self.time_difference_label.grid(row=6, column=0, columnspan=2, pady=10)
         self.master.protocol("WM_DELETE_WINDOW", self.on_close)
         # Update current time every second
         self.update_current_time()
@@ -142,6 +146,7 @@ class TicketGrabbingApp:
         self.time_difference_label.config(text=f"距离抢票开始还有：{time_difference}")
 
     def start_grabbing(self):
+        self.status_label.delete('1.0', tk.END)
         if self.grabbing_thread is not None:
             return
         config_content = self.config_text.get("1.0", tk.END).strip()
@@ -151,6 +156,7 @@ class TicketGrabbingApp:
         minutes = self.minute_entry.get()
         seconds = self.second_entry.get()
         # thread_count = self.thread_count_entry.get()
+
         thread_count = 1
         # Validate inputs and start grabbing in a new thread
 
@@ -183,20 +189,25 @@ class TicketGrabbingApp:
             self.grabbing_thread = threading.Thread(target=self.grab_tickets,
                                                     args=(config_content, start_datetime, thread_count))
             self.grabbing_thread.start()
+
         except ValueError as e:
             error_message = f"输入错误, 有空没输入, 或者输入错误(不能有空格)"
             result = {"success": False, "status": f"{error_message}"}
             self.display_status(result)
             logging.error(result)
 
-    def grab_tickets(self, config_content, start_datetime, thread_count):
+    def grab_tickets(self, config_content, start_datetime,thread_count):
         self.isStartCrabbing = True
 
         tryTimeLeft = 10 if self.tryTime_entry.get() == "" else int(self.tryTime_entry.get())
+        time_before=int(self.time_before_entry.get())
+        # 计算提前开始的时间点
+        early_start_datetime = start_datetime - datetime.timedelta(seconds=time_before)
+
         while self.is_grabbing:
             try:
                 current_datetime = datetime.datetime.now()
-                time_difference = start_datetime - current_datetime
+                time_difference = early_start_datetime - current_datetime
                 if time_difference.total_seconds() > 0:
                     continue
                 # Start Process token tel buyer pay_money timestamp
@@ -245,7 +256,7 @@ class TicketGrabbingApp:
                             result = {"success": False,
                                       "status": f"休息1秒,抢票失败：{order_info['msg']}"}
                             self.display_status(result)
-                            sleep(1)
+                            # sleep(1)
                             continue
 
                         # tel buyer
@@ -286,7 +297,7 @@ class TicketGrabbingApp:
         self.grabbing_thread = None
 
     def display_status(self, result):
-        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
         status_line = f"{current_time} - {'成功' if result['success'] else '失败'}: {result['status']}\n"
         self.status_label.insert(tk.END, status_line)
 
